@@ -584,11 +584,22 @@ function ejecutarAuditoriaAutomatica() {
                 $db->alter();
                 
                 $columnas_lista = [];
+                $columnas_new_old = [];
                 foreach ($columnas_origen as $col) {
+                    $col_name = $col->column_name;
                     // Escapar nombres de columnas con comillas dobles
-                    $columnas_lista[] = "\"{$col->column_name}\"";
+                    $columnas_lista[] = "\"{$col_name}\"";
+                    $columnas_new_old[] = "NEW.\"{$col_name}\"";
                 }
                 $columnas_str = implode(', ', $columnas_lista);
+                $columnas_new_str = implode(', ', $columnas_new_old);
+                
+                // Para OLD (DELETE) necesitamos construir la lista con OLD en lugar de NEW
+                $columnas_old = [];
+                foreach ($columnas_origen as $col) {
+                    $columnas_old[] = "OLD.\"{$col->column_name}\"";
+                }
+                $columnas_old_str = implode(', ', $columnas_old);
                 
                 $function_sql = "
 CREATE OR REPLACE FUNCTION {$esquema_auditoria}.\"{$function_name}\"()
@@ -596,15 +607,15 @@ RETURNS TRIGGER AS \$\$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
         INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        SELECT OLD.*, 'DELETE', current_user, inet_client_addr();
+        VALUES ({$columnas_old_str}, 'DELETE', current_user, inet_client_addr());
         RETURN OLD;
     ELSIF (TG_OP = 'UPDATE') THEN
         INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        SELECT NEW.*, 'UPDATE', current_user, inet_client_addr();
+        VALUES ({$columnas_new_str}, 'UPDATE', current_user, inet_client_addr());
         RETURN NEW;
     ELSIF (TG_OP = 'INSERT') THEN
         INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        SELECT NEW.*, 'INSERT', current_user, inet_client_addr();
+        VALUES ({$columnas_new_str}, 'INSERT', current_user, inet_client_addr());
         RETURN NEW;
     END IF;
     RETURN NULL;
