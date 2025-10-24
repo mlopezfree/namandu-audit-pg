@@ -452,7 +452,7 @@ function ejecutarAuditoriaAutomatica() {
                 }
                 
                 // Agregar columnas de auditoría
-                $columnas_sql[] = "auditoria_id SERIAL PRIMARY KEY";
+                $columnas_sql[] = "auditoria_id INTEGER PRIMARY KEY";
                 $columnas_sql[] = "auditoria_operacion VARCHAR(10)";
                 $columnas_sql[] = "auditoria_usuario VARCHAR(100)";
                 $columnas_sql[] = "auditoria_fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP";
@@ -603,24 +603,42 @@ function ejecutarAuditoriaAutomatica() {
                 
                 $function_sql = "
 CREATE OR REPLACE FUNCTION {$esquema_auditoria}.\"{$function_name}\"()
-RETURNS TRIGGER AS \$\$
+RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        VALUES ({$columnas_old_str}, 'DELETE', current_user, inet_client_addr());
+        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" (auditoria_id, {$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
+        VALUES (
+            (SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM {$esquema_auditoria}.\"{$tabla_nombre}\"),
+            {$columnas_old_str},
+            'DELETE',
+            current_user,
+            inet_client_addr()
+        );
         RETURN OLD;
     ELSIF (TG_OP = 'UPDATE') THEN
-        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        VALUES ({$columnas_new_str}, 'UPDATE', current_user, inet_client_addr());
+        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" (auditoria_id, {$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
+        VALUES (
+            (SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM {$esquema_auditoria}.\"{$tabla_nombre}\"),
+            {$columnas_new_str},
+            'UPDATE',
+            current_user,
+            inet_client_addr()
+        );
         RETURN NEW;
     ELSIF (TG_OP = 'INSERT') THEN
-        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" ({$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
-        VALUES ({$columnas_new_str}, 'INSERT', current_user, inet_client_addr());
+        INSERT INTO {$esquema_auditoria}.\"{$tabla_nombre}\" (auditoria_id, {$columnas_str}, auditoria_operacion, auditoria_usuario, auditoria_ip)
+        VALUES (
+            (SELECT COALESCE(MAX(auditoria_id), 0) + 1 FROM {$esquema_auditoria}.\"{$tabla_nombre}\"),
+            {$columnas_new_str},
+            'INSERT',
+            current_user,
+            inet_client_addr()
+        );
         RETURN NEW;
     END IF;
     RETURN NULL;
 END;
-\$\$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
                 ";
                 
                 $db->setQuery($function_sql);
